@@ -1,23 +1,35 @@
-
-
 ---
 - name: Setup My Arch Environment
   hosts: localhost
   become: yes
-  gather_facts: no
-
+  gather_facts: yes
   tasks:
+      
     - name: Install packages with pacman
       pacman:
         name:
           - neovim
           - tmux
-          - brave
+          - brave-bin
           - flameshot
           - alacritty
           - zoxide
           - remmina
         state: present
+
+    - name: Ensure .ssh directory exists
+      ansible.builtin.file:
+        path: "~/.ssh"
+        state: directory
+        mode: '0700'
+
+    - name: Deploy SSH private key from vault
+      ansible.builtin.copy:
+        src: encrypted_id_ed25519_vault.yml
+        dest: "~/.ssh/id_ed25519"
+        mode: '0600'
+        decrypt: yes
+
 
     - name: Install prerequisite packages for building AUR packages
       pacman:
@@ -44,17 +56,21 @@
         - notion-app 
         - spotify
         - appimagelauncher
+        - obs-studio
       ignore_errors: yes # Use this cautiously, primarily for handling AUR packages that might already be installed.
 
     - name: Install Anaconda globally
-      get_url:
-        url: "https://repo.anaconda.com/archive/Anaconda3-2024.02-1-Linux-x86_64.sh"
-        dest: "/tmp/Anaconda3-2024.02-1-Linux-x86_64.sh"
-        mode: '0755'
-      command: bash /tmp/Anaconda3-2024.02-1-Linux-x86_64.sh -b -p /opt/anaconda3
-      args:
-        creates: "/opt/anaconda3"
+      block:
+        - name: Download Anaconda installer
+          get_url:
+            url: "https://repo.anaconda.com/archive/Anaconda3-2024.02-1-Linux-x86_64.sh"
+            dest: "/tmp/Anaconda3-2024.02-1-Linux-x86_64.sh"
+            mode: '0755'
 
+        - name: Execute Anaconda installer
+          command: bash /tmp/Anaconda3-2024.02-1-Linux-x86_64.sh -b -p /opt/anaconda3
+          args:
+            creates: "/opt/anaconda3"
 
     - name: Install Oh My Zsh
       shell: sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
@@ -80,26 +96,27 @@
 
     - name: Create Projects and Applications directories
       file:
-        path: "{{ item }}"
+        path: "{{ lookup('env', 'HOME') }}/{{ item }}"
         state: directory
         mode: '0755'
       loop:
-        - "~/Projects"
-        - "~/Applications"
+        - "Projects"
+        - "Applications"
       become: no
 
     - name: Download LM_Studio AppImage into Applications directory
       get_url:
         url: "https://releases.lmstudio.ai/linux/0.2.14/beta/LM_Studio-0.2.14-beta-1.AppImage"
-        dest: "~/Applications/LM_Studio-0.2.14-beta-1.AppImage"
+        dest: "{{ lookup('env', 'HOME') }}/Applications/LM_Studio-0.2.14-beta-1.AppImage"
         mode: '0755'
       become: no
 
     - name: Download and Install Obsidian AppImage
       get_url:
-        url: "https://github.com/obsidianmd/obsidian-releases/releases/latest/download/Obsidian-0.12.15.AppImage"
-        dest: "~/Applications/Obsidian.AppImage"
+        url: "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian-1.5.8.AppImage"
+        dest: "{{ lookup('env', 'HOME') }}/Applications/Obsidian.AppImage"
         mode: '0755'
+      become: no
 
     - name: Install Tmux Plugin Manager (TPM)
       git:
