@@ -9,26 +9,59 @@
       pacman:
         name:
           - neovim
+          - zsh
+          - tree
           - tmux
-          - brave-bin
+          - xclip
+          - rofi
           - flameshot
           - alacritty
           - zoxide
           - remmina
+          - ripgrep
+          - pass
+          - fzf
         state: present
 
     - name: Ensure .ssh directory exists
       ansible.builtin.file:
-        path: "~/.ssh"
+        path: "{{ ansible_env.HOME }}/.ssh"
         state: directory
         mode: '0700'
 
     - name: Deploy SSH private key from vault
       ansible.builtin.copy:
         src: encrypted_id_ed25519_vault.yml
-        dest: "~/.ssh/id_ed25519"
+        dest: "{{ ansible_env.HOME }}/.ssh/id_ed25519"
         mode: '0600'
         decrypt: yes
+
+    - name: Check if GPG key exists
+      shell: gpg --list-secret-keys | grep -q "uid"
+      register: gpg_key_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Generate GPG key for pass
+      shell: |
+        cat >gpg_key_script <<EOF
+        %echo Generating a basic OpenPGP key
+        Key-Type: default
+        Subkey-Type: default
+        Name-Real: Your Name
+        Name-Email: your.email@example.com
+        Expire-Date: 0
+        %commit
+        %echo done
+        EOF
+        gpg --batch --generate-key gpg_key_script
+      when: gpg_key_check.rc != 0
+
+
+    - name: Initialize pass with GPG key
+      shell: pass init "your.email@example.com"
+      become: no
+      when: gpg_key_check.rc != 0
 
 
     - name: Install prerequisite packages for building AUR packages
@@ -48,46 +81,38 @@
       shell: cd /tmp/yay && makepkg -si --noconfirm
       args:
         creates: /usr/bin/yay
-      become: yes
+      become: no
 
     - name: Install AUR packages
       shell: yay -S --noconfirm {{ item }}
       with_items:
-        - notion-app 
-        - spotify
-        - appimagelauncher
         - obs-studio
+        - brave-bin
+        - rofi-notion
+        - notion-app-electron
+        - obsidian
       ignore_errors: yes # Use this cautiously, primarily for handling AUR packages that might already be installed.
-
-    - name: Install Anaconda globally
-      block:
-        - name: Download Anaconda installer
-          get_url:
-            url: "https://repo.anaconda.com/archive/Anaconda3-2024.02-1-Linux-x86_64.sh"
-            dest: "/tmp/Anaconda3-2024.02-1-Linux-x86_64.sh"
-            mode: '0755'
-
-        - name: Execute Anaconda installer
-          command: bash /tmp/Anaconda3-2024.02-1-Linux-x86_64.sh -b -p /opt/anaconda3
-          args:
-            creates: "/opt/anaconda3"
+      become: no
 
     - name: Install Oh My Zsh
       shell: sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
       args:
         creates: "{{ ansible_env.HOME }}/.oh-my-zsh"
-   
+
+    - name: Install P10k
+      git:
+        repo: 'https://github.com/romkatv/powerlevel10k.git'
+        dest: "{{ ansible_env.HOME }}/.oh-my-zsh/custom/themes/powerlevel10k"
+          
     - name: Install Zsh autosuggestions plugin
       git:
-        repo: 'https://github.com/zsh-users/zsh-autosuggestions'
+        repo: 'https://github.com/zsh-users/zsh-autosuggestions.git'
         dest: "{{ ansible_env.HOME }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-      become: no
 
     - name: Install Zsh syntax highlighting plugin
       git:
-        repo: 'https://github.com/zsh-users/zsh-syntax-highlighting'
+        repo: 'https://github.com/zsh-users/zsh-syntax-highlighting.git'
         dest: "{{ ansible_env.HOME }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
-      become: no
 
     - name: Set up Zsh as the default shell
       user:
@@ -102,7 +127,11 @@
       loop:
         - "Projects"
         - "Applications"
+        - "Obsidian"
+        - "Images"
       become: no
+
+    # Set area for setting gpg key for chatgpt plugin
 
     - name: Download LM_Studio AppImage into Applications directory
       get_url:
@@ -123,21 +152,33 @@
         repo: 'https://github.com/tmux-plugins/tpm'
         dest: "{{ ansible_env.HOME }}/.tmux/plugins/tpm"
         version: "master"
-      become: no
 
     - name: Ensure Tmux Plugin Manager (TPM) directory exists
       file:
         path: "{{ ansible_env.HOME }}/.tmux/plugins/tpm"
         state: directory
         mode: '0755'
-      become: no
+
+    - name: Install Anaconda globally
+      block:
+        - name: Download Anaconda installer
+          get_url:
+            url: "https://repo.anaconda.com/archive/Anaconda3-2024.02-1-Linux-x86_64.sh"
+            dest: "/tmp/Anaconda3-2024.02-1-Linux-x86_64.sh"
+            mode: '0755'
+
+        - name: Execute Anaconda installer
+          command: bash /tmp/Anaconda3-2024.02-1-Linux-x86_64.sh -b -p /opt/anaconda3
+          args:
+            creates: "/opt/anaconda3"
+
+    ### Set Space for conda config --set auto_activate_base true
 
     - name: Clone dotfiles repository
       git:
-        repo: 'https://github.com/IntiMech/dotfiles'
+        repo: 'https://github.com/IntiMech/dotfiles.git'
         dest: "~/dotfiles"
-        version: "main"
-      become: no
+        version: "master"
 
     - name: Apply specific dotfiles using Stow
       shell: stow -d ~/dotfiles -t ~ {{ item }}
