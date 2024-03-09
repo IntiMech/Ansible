@@ -10,6 +10,7 @@
         name:
           - neovim
           - zsh
+          - noto-fonts-emoji
           - tree
           - tmux
           - xclip
