@@ -10,7 +10,11 @@
         name:
           - neovim
           - zsh
+          - exa
+          - picom
           - noto-fonts-emoji
+          - freerdp
+          - remmina
           - tree
           - tmux
           - xclip
@@ -92,6 +96,7 @@
         - rofi-notion
         - notion-app-electron
         - obsidian
+        - xrdp
       ignore_errors: yes # Use this cautiously, primarily for handling AUR packages that might already be installed.
       become: no
 
